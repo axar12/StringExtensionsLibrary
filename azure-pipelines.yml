@@ -1,0 +1,48 @@
+trigger:
+  - main
+
+pool:
+  name: 'Default'
+  demands:
+    - Agent.Name -equals 'self-hosted'
+
+variables:
+  buildConfiguration: 'Release'
+
+steps:
+  # Install .NET SDK
+  - task: UseDotNet@2
+    inputs:
+      packageType: 'sdk'
+      version: '8.x'
+      installationPath: $(Agent.ToolsDirectory)/dotnet
+
+  # Restore dependencies
+  - script: dotnet restore
+    displayName: 'Restore dependencies'
+
+  # Build the project
+  - script: dotnet build --configuration $(buildConfiguration)
+    displayName: 'Build project'
+
+  # Run tests (if any)
+  - script: dotnet test --configuration $(buildConfiguration)
+    displayName: 'Run tests'
+
+  # Pack the NuGet package
+  - script: dotnet pack --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)
+    displayName: 'Pack NuGet package'
+
+  # Publish the package to Azure Artifacts
+  - task: NuGetCommand@2
+    inputs:
+      command: 'push'
+      packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+      publishVstsFeed: '<Azure_Artifacts_Feed>'
+      allowPackageConflicts: true
+
+  # Publish pipeline artifacts
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)
+      artifact: 'NuGetPackage'
